@@ -1,0 +1,121 @@
+一、背景
+
+CE从4.2.0.0开始将原有依赖的spring版本3.0.5.RELEASE升级到了3.2.14.RELEASE,spring从3.1.X即开始提供了profile的功能，参考这里。
+本次CE升级到4.2.0.0之后也在SOFA中提供了module之间profile功能，即在各个module启动的时候来决定每一个module是否能够启动（module能否被正确安装运行）。
+
+注意：应用启动的启动日志会打印出所有module的启动情况和未被启动的原因，需要重点关注
+
+
+二、使用前提条件
+
+使用SOFA4 module能够按照激活条件启动，必须满足如下的条件：
+
+1.CE版本必须在4.2.0.0及以上版本使用,依赖信息可以如下
+
+<dependency>
+     <groupId>com.alipay.cloudengine</groupId>
+     <artifactId>cloudengine-bom</artifactId>
+     <version>4.2.0.0</version>
+     <type>pom</type>
+     <scope>import</scope>
+</dependency>
+2.mvc也做了相应的适配修改必须在4.1.6及以上版本使用，见MVC_ISSUE(注意mvc从此版本开始一些插件将不兼容)
+<dependency>
+      <groupId>com.alipay.sofa.web.mvc</groupId>
+      <artifactId>mvc-bom</artifactId>
+      <version>4.1.6</version>               
+  </dependency>
+注意：从上个4.1.4.3版本的cloudengine-bom开始将 sofa-runtime-test 也纳入进去，从4.1.4.3起业务无需在主 pom 中声明 sofa-runtime-test 的依赖，如果目前有的话，请在此版本删除（本版本依赖的sofa-runtime-test是4.0.6.0已经在4.2.0.0的cloudengine-bom中声明）。
+
+三、使用Module-Profile激活module
+
+使用SOFA的profile功能，也很简单，只需要在sofa-config.properties(本地启动中是在sofaconfig/sofa-test-config.properties中配置)增加一个字段sofa_runtime_profiles_active；同时在每一个SOFA module的META-INF/MANIFEST.MF配置中，增加一个字段Module-Profile即可，下面举例几种情况（注意CE从4.2.0.0及以上版本开始提供此功能）。
+
+注意：sofa_runtime_profiles_active中是不能包含“!”这个符号的，否则会启动异常。而Module-Profile是可以包含“!”符号，表示sofa_runtime_profiles_active中包含指定的profile时不启动，下面举例说明。
+
+1.只有SOFA module是dev的profile模块才能够被激活，配置如下即可：
+
+1.1 sofa-config.properties中增加配置如下：
+
+/**SOFA运行环境激活SOFA module的profile是dev*/
+sofa_runtime_profiles_active = dev
+1.2 在每一个需要被激活module的META-INF/MANIFEST.MF(注意保留最后一行的空行)文件中增加如下配置：
+
+Module-Profile: dev
+2.只有SOFA module是dev或者test的profile模块才能够被激活，配置如下即可：
+
+2.1 sofa-config.properties中增加配置如下：
+
+/**SOFA运行环境激活SOFA module的profile是dev或者test*/
+sofa_runtime_profiles_active = dev,test
+2.2 在每一个需要被激活module的META-INF/MANIFEST.MF(注意保留最后一行的空行)文件中增加如下配置：
+
+Module-Profile: dev
+或者这样配置：
+
+
+Module-Profile: test
+3.SOFA module可以指定在满足某种profile的条件下不激活：
+
+3.1 sofa-config.properties中增加配置如下：
+
+/**SOFA运行环境激活SOFA module的profile是dev*/
+sofa_runtime_profiles_active = dev
+3.2 module的META-INF/MANIFEST.MF(注意保留最后一行的空行)文件中增加如下配置，这样这个module就不会被激活
+
+/**当前module在sofa_runtime_profiles_active包含dev时不会被激活*/
+Module-Profile: !dev
+4.sofa-config或者MANIFEST能够配置多个激活的profile条件参数
+
+4.1 sofa-config.properties中增加配置如下：
+
+/**SOFA运行环境激活SOFA module的profile是dev或者test，每一个profile用英文半角逗号","分隔*/
+sofa_runtime_profiles_active = dev,test
+4.2 module的META-INF/MANIFEST.MF(注意保留最后一行的空行)文件中增加如下配置，这样这个module在sofa_runtime_profiles_active包含dev时不会
+激活但是在包含product时会被激活。
+
+/**当前module在sofa_runtime_profiles_active包含dev时不会被激活，但在包含product会被激活*/
+Module-Profile: !dev,product
+上面这种配置当前module不会被激活，但是当在sofa-config.properties中增加product配置时就会启动这个module，
+即sofa_runtime_profiles_active=dev,test,product就会激活当前module。
+
+四、被激活的SOFA4 module其spring上下文的spring.profiles.active也将被设置为当前SOFA环境sofa_runtime_profiles_active激活的信息
+
+下面举例：
+
+sofa-config.properties中增加配置如下：
+
+/**SOFA运行环境激活SOFA module的profile是dev或者test，同时对于没有配置Module-Profile的SOFA module也会被激活*/
+sofa_runtime_profiles_active = dev,test
+当一个module满足了上面的激活条件时，这个module就会被启动，同时spring上下文的环境信息spring.profiles.active也被设置为了“default,dev,test”，这样如下的配置beanId为devBeanId和testBeanId的bean都会被激活。
+
+
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:jdbc="http://www.springframework.org/schema/jdbc"
+       xmlns:jee="http://www.springframework.org/schema/jee"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+                                                http://www.springframework.org/schema/beans/spring-beans-3.2.xsd
+                                                http://www.springframework.org/schema/context
+                                                http://www.springframework.org/schema/context/spring-context.xsd"
+       default-autowire="byName">       
+
+    <beans profile="dev">
+        <bean id="devBeanId" class="com.alipay.cloudenginetest.sofaprofilesenv.DemoBean">
+            <property name="name">
+                <value>demoBeanDev</value>
+            </property>
+        </bean>
+    </beans>
+
+    <beans profile="test">
+        <bean id="testBeanId" class="com.alipay.cloudenginetest.sofaprofilesenv.DemoBean">
+            <property name="name">
+                <value>demoBeanTest</value>
+            </property>
+        </bean>
+    </beans>
+
+</beans>
+最后最后建议大家的配置为：sofa_runtime_profiles_active=XXX1,XXX2...。
