@@ -1,0 +1,14 @@
+
+GIT使用顺序
+Git add git commit --->  git pull  --rebase ---> git push   刚才跟专家确认了下 正确的提交顺序
+
+
+下载代码
+git clone -b 地址
+例如 Git clone –b ANTM0086695_normal_20160928_dataweb  git@gitlab.alipay-inc.com:shangshu_release/dataweb.git 
+
+Maven 配置使用 Runner 启动报错使用
+-Dmaven.multiModuleProjectDirectory=$M2_HOME
+
+
+
