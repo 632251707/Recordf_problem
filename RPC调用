@@ -1,0 +1,263 @@
+官方的Rpc低层是dubbo    https://github.com/alibaba/dubbo?spm=5176.100239.blogcont8.8.hrEARx
+
+实际阿里RPC是  
+
+上面这段配置在 sofa:service 上设置了 uniqueId 为 testId，发布了一个 uniqueId 为 testId 的服务。如果需要引用这个服务，需要在 sofa:reference 上也配置 uniqueId：
+
+<sofa:reference interface="com.alipay.sofa.runtime.test.test.service.SampleService" id="sampleService" uniqueId="testId">
+  <sofa:binding.tr/>
+</sofa:reference>
+注意：这里 sofa:service 和 sofa:reference 的 uniqueId 必须一致才有效。 uniqueId只有对TR才有效,WS是无效的。
+
+ServiceListener
+
+此类主要用于给业务方监听配置中心地址池的变更，目前使用量非常少。
+
+SOFA 目前支持的 RPC 的 Binding 主要有
+
+<sofa:binding.tr>：TR 的服务
+<sofa:binding.ws>：WS 的服务
+<sofa:binding.hsf>
+
+
+关于ws和tr选择问题
+
+每次ws请求均是一次http请求，tr则会与服务器保持tcp长连接，ws性能约为tr的50%。且ws基于的xfire坑比较多，如果有rpc需求，请尽可能优先使用tr服务。
+
+binding.ws
+
+简介
+
+ws全名webservice，基于开源软件xfire实现。 在sofa中，xfire直接运行在jetty容器里面，端口为8080，
+如果熟悉xfire机制的同学，可以通过地址：http://ip:8080/services/yourInterfaceName?wsdl查看发布服务的详细信息。
+
+vip配置
+
+No.	配置项	描述	示例
+1	vip	vip地址	http://service_ip:port
+2	serviceUrl	兼容webx、sofa1的自定义服务地址	/service/xfire/newcoupon/voucher/createCoupon
+一般情况下只需要配置vip即可，但有些系统发布的服务是自定义的URL形式，如/service/xfire/newcoupon/voucher/createCoupon，这些特殊的url主要集中在遗留的webx系统中和少量的sofa系统中，如charge。对于这类场景，我们提供了serviceUrl参数，如下：
+
+<sofa:reference id="myTestService" interface="com.alipay.test.MyInterface">
+    <sofa:binding.ws>
+        <compatible>
+            <vip>http://service_ip:port</vip>
+            <!-- 开头的“/”可写也可不写。必须保证“vip+serviceUrl+?wsdl”可以访问到该服务-->
+            <serviceUrl>/service/xfire/newcoupon/voucher/createCoupon</serviceUrl>
+        </compatible>
+    </sofa:binding.ws>
+</sofa:reference>
+属性配置
+
+No.	配置项	描述	默认值
+1	http.timeout	http请求超时时间	10s
+2	http.connection.timeout	建立连接的超时时间设定	5s
+3	http.connection.manager.timeout	从连接池中取不到连接，最大等待时间	2s
+4	max.connections.per.host	针对当前接口每个host对应的最大连接数	10
+5	max.total.connections	针对当前接口连接池最大的链接数	200
+6	http.retry.count	http重试次数	3
+属性配置的方式举例如下：
+
+<sofa:reference id="userQueryRef" interface="com.alipay.cif.user.UserInfoQueryService">
+    <sofa:binding.ws testURL="http://app.stable.alipay.net:8080">
+        <attributes http.timeout="5000"
+            http.connection.timeout="3000"
+            http.connection.manager.timeout="1000"
+            max.connections.per.host="30"
+            max.total.connections="120" />
+    </sofa:binding.ws>
+</sofa:service>
+其它问题
+
+关于ws和tr选择问题
+
+每次ws请求均是一次http请求，tr则会与服务器保持tcp长连接，ws性能约为tr的50%。且ws基于的xfire坑比较多，如果有rpc需求，请尽可能优先使用tr服务。
+
+xfire调用时参数中有特殊的ascii码会报错
+
+ascii码的0x00 ~ 0x1F在ws调用时会报错，回车/tab/空格，这3个字符支持。
+
+引用方与服务方接口不一致
+
+以下主要存在于服务方想无缝升级的情况下：
+
+存在方法重载的情况，可能会出现的方法调错的情况，因为xfire对重载方法通过在方法名后进行加序号区分的
+参数中减少了字段，那么服务端解析的时候会报错，返回结果中增加了字段，那么客户端反序列化会报错
+jetty线程池
+
+请参考："SOFA配置"中的"RPC线程池配置"章节
+
+其余的坑可以参考：
+
+http://doc.alipay.net/pages/viewpage.action?pageId=78615854 http://doc.alipay.net/pages/viewpage.action?pageId=78620193
+
+其他使用方式：
+可以在antx中配置core_port，用来设置ws服务发布的接口
+
+
+
+binding.tr（重点）
+
+简介
+
+TR 的名称来自于 TR 使用的底层通信框架 TBRemoting。相对于 WS，TR 支持更加复杂的对象，序列化后的对象更小，占用的带宽更小，整体上都比 WS 优秀很多很多。
+
+在 SOFA 中，TR 的服务端使用的端口是 12200，可以访问 http://{hostname}:8080/sofa/component/tr?name={appname} 来查看应用发布的 TR 服务列表
+
+简单示例
+
+发布一个 TR 的服务只需要在 sofa:service 中添加一个 sofa:binding.tr 即可，如下：
+
+<sofa:service interface="com.alipay.sofa.runtime.test.test.service.SampleService" ref="sampleService">
+    <sofa:binding.tr/>
+</sofa:service>
+引用一个 TR 的服务也只需要在 sofa:reference 中添加一个 sofa:binding.tr 即可，如下：
+
+<sofa:reference interface="com.alipay.sofa.runtime.test.test.service.SampleService" id="sampleService">
+    <sofa:binding.tr/>
+</sofa:reference>
+TR 服务端 Server 配置
+
+TR 的底层是基于 TRRemoting 的，服务端说白了其实就是一个 NIO 的 Server，在 SOFA 框架中，提供了几个选项可以去调整 TR Server 的一些属性，列举如下：
+
+NO.	配置项	描述	默认值
+1	tr_min_pool_size	TR线程池最少线程数配置	80
+2	tr_max_pool_size	TR线程池最大线程数配置	400
+3	tr_queue_size	TR线程池队列长度配置	1000
+以上所有的配置都是从 sofa-config.properties 里面读取的，如果需要配置，请配置在 sofa-config.properties 里面。
+
+TR 的客户端的几种调用方式
+
+TR 提供了多种的调用方式，以满足各种业务场景上的需求，目前 TR 提供的调用方式有：
+
+调用方式	类型	说明
+sync	同步	TR 默认调用方式
+oneway	异步	客户端发送请求后，直接返回，忽略服务端的处理结果
+callback	异步	客户端提供一个回调接口，当服务端返回后，客户端会执行回调接口
+future	异步	Future 也是一种异步的调用方式，调用后，客户端马上返回，当客户端需要结果的时候，需要客户端主动去获取数据
+sync 调用
+
+这里主要说一下如何配置 sync 调用的超时时间。 首先 TR 支持在服务端配置超时时间，代码如下：
+
+<sofa:service interface="com.alipay.sofa.runtime.test.test.service.SampleService2" ref="sampleService2">
+    <sofa:binding.tr>
+        <method name="service" type="sync">
+            <attributes _TIMEOUT="5000"/>
+        </method>
+    </sofa:binding.tr>
+</sofa:service>
+但是需要注意的是，如果在客户端配置了超时时间，那么将以客户端的超时时间为准，服务端的超时时间将被覆盖；如果客户端没有配置，那么以服务端的超时时间为准。
+
+那么客户端的超时时间如何配置呢？和服务端类似，代码如下：
+
+<sofa:reference interface="com.alipay.sofa.runtime.test.test.service.SampleService2" id="sampleServiceSync">
+    <sofa:binding.tr testURL="127.0.0.1:12200">
+        <method name="service" type="sync">
+            <attributes _TIMEOUT="10000"/>
+        </method>
+    </sofa:binding.tr>
+</sofa:reference>
+这里需要特别注意的是，如果设置了 method 标签，那么 type 一定要配置成 sync 的， 默认的 type 是 oneway，在 oneway 的情况下，超时属性是没有作用的。
+
+当然，如果有多个方法需要配置超时时间，并且超时时间都是相同的话，也可以进行批量的配置：
+
+<sofa:reference interface="com.alipay.sofa.runtime.test.test.service.SampleService2" id="sampleServiceSync">
+    <sofa:binding.tr testURL="127.0.0.1:12200">
+        <attributes timeout="5000" />
+        <method name="service" type="sync"/>
+        <method name="service1" type="sync"/>
+    </sofa:binding.tr>
+</sofa:reference>
+上面的配置中，首先配置了一个总的 attributes，设置 timeout，后面配置了几个方法，表示 timeout 对这几个方法生效。
+
+注意事项
+批量配置的时候必须指定 method，如果不指定的话，那么超时时间还是默认的 3s，attributes 上的超时时间将无效。
+
+oneway 调用
+
+oneway 的调用，客户端不关心结果，发起调用后直接返回，忽略客户端的处理结果，在 TR 中，如果在 XML 中针对 method 进行了配置，但是没有指定调用类型，那么就是 oneway 的，配置如下：
+
+<sofa:reference interface="com.alipay.sofa.runtime.test.test.service.SampleService2" id="sampleService">
+    <sofa:binding.tr testURL="127.0.0.1:12200">
+        <method name="service"/>
+    </sofa:binding.tr>
+</sofa:reference>
+上面的配置等同于显式地配置 oneway，如下:
+
+<sofa:reference interface="com.alipay.sofa.runtime.test.test.service.SampleService2" id="sampleService2">
+    <sofa:binding.tr testURL="127.0.0.1:12200">
+        <method name="service" type="oneway"/>
+    </sofa:binding.tr>
+</sofa:reference>
+注意事项：
+配置超时的时候请注意，由于配置了 method 以后，默认是 oneway 的。而 oneway 是直接返回，不关心处理结果的，所以，如果你在配置 method 的超时属性的时候，没有设置 type，那么这个超时属性将是完全无效的，无效的超时设置如下：
+
+<sofa:reference interface="com.alipay.sofa.runtime.test.test.service.SampleService2" id="sampleService">
+    <sofa:binding.tr testURL="127.0.0.1:12200">
+        <method name="service">
+            <attributes _TIMEOUT="10000"/>
+        </method>
+    </sofa:binding.tr>
+</sofa:reference>
+callback 调用
+
+callback 是一种异步回调的方式，客户端需要提供回调接口，在调用结束后，回调接口会被调用。它的配置如下：
+
+<sofa:reference id="testTrServiceClient" interface="com.alipay.biz.test.service.tr.TestTrService">
+    <sofa:binding.tr>
+                 <callbackHandler class="com.alipay.test.binding.tr.MyCallBackHandler" />
+                 <method name="testCallback" type="callback"/>
+    </sofa:binding.tr>
+</sofa:reference>
+
+
+
+
+
+这些配置都可以配置在客户端的 binding.tr 中，一份完整的配置如下：
+
+<sofa:reference interface="com.alipay.sofa.runtime.test.test.service.SampleService2" id="sampleServiceSync">
+    <sofa:binding.tr testURL="127.0.0.1:12200">
+        <attributes timeout="5000" connect.timeout="1000" connect.num="-1" idle.timeout="-1"
+                    idle.timeout.read="-1" timeout-in-multiple="false" />
+        <method name="service" type="sync"/>
+    </sofa:binding.tr>
+</sofa:reference>
+
+注：<attributes/> 节点只能配置一次，多次配置以第一个为准。
+
+
+
+rpc转发
+
+ws/tr压测转发
+
+框架提供ws和tr的转发功能，业务系统通过在antx中新增proxy_url变量，指定需要转发的地址。实际RPC调用过程中，框架会将请求转发至配置的实际地址。
+例如：core_proxy_url=10.209.109.86。一般情况下该功能用于线上压测引流（@ACM平台）。
+
+预热转发
+
+集群中一台机器刚启动的一段时间内如果请求过多可能会影响机器性能和正常业务，从sofa2.1.5和sofa3.1.11开始框架提供一种在启动的“预热期”
+内将请求转发到集群其它机器的功能，过了预热期之后又可以恢复正常。也就是说“预热转发功能”是指在启动完成后的“一段时间”内将请求转发至集群内其它机器，
+等过了这段时间后再正常接收请求。其中，“一段时间”内既可以全部转发至其它机器，也可以通过配置按照一定比例转发，比如80%的请求转发出去，20%自身系统处理。
+使用方法： 配置上仍使用原有转发的core_proxy_url,配置的方式有两种。
+
+兼容老的配置，直接转发到ip。
+
+core_proxy_url = x.x.x.x
+
+预热与权重配置
+
+core_proxy_url = weightStarting:1,during:60,weightStarted:0,address:x.x.x.x weightStarting:预热期内的转发权重或概率，
+会在集群中随机找一台机器以此权重转出或接收。 during:预热期的时间长度,单位为秒 weightStarted:预热期过后的转发权重 address:预热期过后的转发地址
+uniqueId:同一appName多集群部署的情况下，要区别不同集群可以通过配置此项区分。指定一个自定义的系统变量，保证集群唯一即可。
+
+上述两种配置只能任选其一配置，但使用配置2可以完成配置1的效果。举例， core_proxy_url =during:60 --预热期的1分钟内全部转发到集群中的某一台机器中，
+过了预热期默认不转发。 core_proxy_url =weightStarting:0.3,during:60，weightStarting:0.2，address:x.x.x.x，uniqueId:core_unique 
+--预热期的1分钟内30%的概率转发到集群中的某一台机器中，集群的标识是appName+core_unique的实际值共同决定。过了预热期20%的概率转发到x.x.x.x。 
+core_proxy_url = x.x.x.x --不论何时都直接转发到x.x.x.x.和core_proxy_url = address:x.x.x.x同样效果。
+
+
+
+
+
